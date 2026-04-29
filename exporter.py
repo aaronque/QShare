@@ -16,18 +16,19 @@ from qgis.core import (
 # ─────────────────────────────────────────────
 
 def sanitize_filename(name):
-    """Sanitizes a name for use as a file or folder."""
+    """Sanitize a name for use as a file or folder."""
     return re.sub(r'[<>:"/\\|?*]', '_', name).strip()
 
 
 def sanitize_gpkg_name(name):
-    """Sanitizes a name for use as a table in GeoPackage."""
+    """Sanitize a name for use as a table in a GeoPackage."""
     s = re.sub(r'[^\w]', '_', name, flags=re.UNICODE)
     s = re.sub(r'_+', '_', s).strip('_')
     return s or "layer"
 
 
 def get_group_path(layer_node, root):
+    """Return the list of parent group names for a layer node."""
     path = []
     parent = layer_node.parent()
     while parent and parent != root:
@@ -37,7 +38,8 @@ def get_group_path(layer_node, root):
     return path
 
 
-def es_wms(layer):
+def is_wms(layer):
+    """Return True if the layer is a WMS or WMTS service."""
     return layer.providerType() in ('wms', 'wmts')
 
 
@@ -47,14 +49,14 @@ def es_wms(layer):
 
 class Exporter:
     """
-    Exports a packaged QGIS project to a folder or ZIP.
+    Export a packaged QGIS project to a folder or ZIP.
 
     Works on a separate instance of QgsProject to avoid
     modifying the user's active session.
     """
 
-    EXTENSIONES_IMG = {'.png', '.jpg', '.jpeg', '.svg', '.bmp',
-                       '.tif', '.tiff', '.gif', '.webp'}
+    IMG_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.svg', '.bmp',
+                      '.tif', '.tiff', '.gif', '.webp'}
 
     def __init__(self, dest_root, vector_format='gpkg',
                  output_mode='folder', log_callback=None,
@@ -65,7 +67,7 @@ class Exporter:
         self.log = log_callback or (lambda msg: None)
         self.progress = progress_callback or (lambda c, t: None)
 
-        self.errores = []
+        self.errors = []
         self.ok_count = 0
         self.wms_count = 0
         self.img_ok = 0
@@ -80,9 +82,9 @@ class Exporter:
 
     def run(self):
         active_project = QgsProject.instance()
-        nombre_orig = (Path(active_project.fileName()).stem
-                       if active_project.fileName() else "project")
-        project_name = sanitize_filename(nombre_orig)
+        original_name = (Path(active_project.fileName()).stem
+                         if active_project.fileName() else "project")
+        project_name = sanitize_filename(original_name)
 
         # ZIP → work in a temporary directory and compress at the end
         # Folder → work directly in dest_root/<name>
@@ -96,22 +98,22 @@ class Exporter:
             tmp_root = None
 
         try:
-            self._cargar_proyecto_paralelo(active_project)
+            self._load_parallel_project(active_project)
 
-            capas_root = work_root / "LAYERS"
-            capas_root.mkdir(exist_ok=True)
+            layers_root = work_root / "LAYERS"
+            layers_root.mkdir(exist_ok=True)
 
             self.log("=" * 55)
-            self.log(f"  Destination:  {work_root}")
-            self.log(f"  Layers in: {capas_root}")
+            self.log(f"  Destination:   {work_root}")
+            self.log(f"  Layers in:     {layers_root}")
             self.log(f"  Vector format: {self.vector_format.upper()}")
             self.log("=" * 55)
 
-            self._exportar_capas(capas_root, project_name)
+            self._export_layers(layers_root, project_name)
 
             self.log("")
             self.log("  — Layout images —")
-            self._exportar_imagenes(work_root)
+            self._export_images(work_root)
 
             # Relative paths + save .qgz
             self.export_project.writeEntry("Paths", "/Absolute", "false")
@@ -131,12 +133,12 @@ class Exporter:
                     root_dir=str(tmp_root),
                     base_dir=project_name,
                 )
-                salida_final = Path(zip_path)
-                self.log(f"  ✓ ZIP created: {salida_final.name}")
+                final_output = Path(zip_path)
+                self.log(f"  ✓ ZIP created: {final_output.name}")
             else:
-                salida_final = work_root
+                final_output = work_root
 
-            self._resumen(salida_final)
+            self._summary(final_output)
 
         finally:
             if tmp_root and tmp_root.exists():
@@ -149,13 +151,13 @@ class Exporter:
     # PARALLEL PROJECT
     # ─────────────────────────────────────
 
-    def _cargar_proyecto_paralelo(self, active_project):
+    def _load_parallel_project(self, active_project):
         """
-        Saves the active project to a temporary .qgz and loads it into
+        Save the active project to a temporary .qgz and load it into
         a separate QgsProject. This way all subsequent manipulation
-        occurs outside the session.
+        occurs outside the user's session.
         """
-        # 1. Guardamos el estado y la ruta original
+        # 1. Save the original state and file path
         original_file = active_project.fileName()
         original_dirty = active_project.isDirty()
 
@@ -164,19 +166,21 @@ class Exporter:
         )
         tmp_qgz.close()
         try:
-            # 2. Escribimos al temporal (QGIS cambiará la ruta activa internamente)
+            # 2. Write to the temporary file
+            #    (QGIS will internally change the active project's path)
             active_project.write(tmp_qgz.name)
-            
-            # 3. ¡Solución! Restauramos la ruta y el estado original al instante
+
+            # 3. Restore the original path and dirty state immediately,
+            #    so the user's session is left untouched
             if original_file:
                 active_project.setFileName(original_file)
             else:
                 active_project.setFileName("")
-                
+
             if original_dirty:
                 active_project.setDirty(True)
 
-            # 4. Cargamos el proyecto paralelo
+            # 4. Load the parallel project from the temporary file
             self.export_project = QgsProject()
             self.export_project.read(tmp_qgz.name)
         finally:
@@ -189,13 +193,13 @@ class Exporter:
     # LAYERS
     # ─────────────────────────────────────
 
-    def _exportar_capas(self, capas_root, project_name):
+    def _export_layers(self, layers_root, project_name):
         root = self.export_project.layerTreeRoot()
         ctx = QgsCoordinateTransformContext()
         layers = list(root.findLayers())
         total = len(layers)
 
-        gpkg_path = capas_root / f"{project_name}.gpkg"
+        gpkg_path = layers_root / f"{project_name}.gpkg"
 
         for i, layer_node in enumerate(layers, 1):
             self.progress(i, total)
@@ -204,40 +208,40 @@ class Exporter:
             if not layer:
                 continue
 
-            grupos = get_group_path(layer_node, root)
+            groups = get_group_path(layer_node, root)
             name = sanitize_filename(layer.name())
-            ruta_visual = "LAYERS/" + (
-                "/".join(grupos + [name]) if grupos else name
+            display_path = "LAYERS/" + (
+                "/".join(groups + [name]) if groups else name
             )
 
-            if es_wms(layer):
-                self.log(f"  ~ [WMS]  {ruta_visual}: kept with original URL")
+            if is_wms(layer):
+                self.log(f"  ~ [WMS]  {display_path}: kept with original URL")
                 self.wms_count += 1
                 continue
 
             if layer.type() == QgsMapLayer.VectorLayer:
                 if self.vector_format == 'gpkg':
-                    self._exportar_vector_gpkg(
-                        layer, gpkg_path, grupos, name, ctx, ruta_visual
+                    self._export_vector_gpkg(
+                        layer, gpkg_path, groups, name, ctx, display_path
                     )
                 else:
-                    self._exportar_vector_shp(
-                        layer, capas_root, grupos, name, ctx, ruta_visual
+                    self._export_vector_shp(
+                        layer, layers_root, groups, name, ctx, display_path
                     )
 
             elif layer.type() == QgsMapLayer.RasterLayer:
-                self._exportar_raster(
-                    layer, capas_root, grupos, name, ruta_visual
+                self._export_raster(
+                    layer, layers_root, groups, name, display_path
                 )
 
             else:
-                self.errores.append(
-                    f"[???]  {ruta_visual}  →  unrecognized layer type"
+                self.errors.append(
+                    f"[???]  {display_path}  →  unrecognized layer type"
                 )
-                self.log(f"  ⚠ [???]  {ruta_visual}: unrecognized type, skipped")
+                self.log(f"  ⚠ [???]  {display_path}: unrecognized type, skipped")
 
-    def _exportar_vector_shp(self, layer, capas_root, grupos, name, ctx, ruta_visual):
-        layer_dir = capas_root.joinpath(*grupos) if grupos else capas_root
+    def _export_vector_shp(self, layer, layers_root, groups, name, ctx, display_path):
+        layer_dir = layers_root.joinpath(*groups) if groups else layers_root
         layer_dir.mkdir(parents=True, exist_ok=True)
         dest_file = layer_dir / f"{name}.shp"
 
@@ -253,19 +257,19 @@ class Exporter:
         )
         if res[0] == QgsVectorFileWriter.NoError:
             layer.setDataSource(str(dest_file), layer.name(), "ogr")
-            self.log(f"  ✓ [{tag}]  {ruta_visual}.shp")
+            self.log(f"  ✓ [{tag}]  {display_path}.shp")
             self.ok_count += 1
         else:
-            self.errores.append(f"[{tag}]  {ruta_visual}  →  {res[1]}")
-            self.log(f"  ✗ [{tag}]  {ruta_visual}: {res[1]}")
+            self.errors.append(f"[{tag}]  {display_path}  →  {res[1]}")
+            self.log(f"  ✗ [{tag}]  {display_path}: {res[1]}")
 
-    def _exportar_vector_gpkg(self, layer, gpkg_path, grupos, name, ctx, ruta_visual):
+    def _export_vector_gpkg(self, layer, gpkg_path, groups, name, ctx, display_path):
         provider = layer.providerType()
         tag = "PG " if provider == "postgres" else "VEC"
 
         # Table name: group_subgroup_layer, with disambiguation
-        partes = grupos + [name]
-        base_name = sanitize_gpkg_name("_".join(partes))
+        parts = groups + [name]
+        base_name = sanitize_gpkg_name("_".join(parts))
         layer_name = base_name
         counter = 1
         while layer_name in self._used_gpkg_names:
@@ -290,22 +294,22 @@ class Exporter:
             self._gpkg_initialized = True
             new_uri = f"{gpkg_path}|layername={layer_name}"
             layer.setDataSource(new_uri, layer.name(), "ogr")
-            self.log(f"  ✓ [{tag}]  {ruta_visual}  →  {gpkg_path.name}:{layer_name}")
+            self.log(f"  ✓ [{tag}]  {display_path}  →  {gpkg_path.name}:{layer_name}")
             self.ok_count += 1
         else:
-            self.errores.append(f"[{tag}]  {ruta_visual}  →  {res[1]}")
-            self.log(f"  ✗ [{tag}]  {ruta_visual}: {res[1]}")
+            self.errors.append(f"[{tag}]  {display_path}  →  {res[1]}")
+            self.log(f"  ✗ [{tag}]  {display_path}: {res[1]}")
 
-    def _exportar_raster(self, layer, capas_root, grupos, name, ruta_visual):
-        layer_dir = capas_root.joinpath(*grupos) if grupos else capas_root
+    def _export_raster(self, layer, layers_root, groups, name, display_path):
+        layer_dir = layers_root.joinpath(*groups) if groups else layers_root
         layer_dir.mkdir(parents=True, exist_ok=True)
 
         src_raw = layer.source().split('|')[0]
         if not os.path.isfile(src_raw):
-            self.errores.append(
-                f"[RAS]  {ruta_visual}  →  source is not a local file"
+            self.errors.append(
+                f"[RAS]  {display_path}  →  source is not a local file"
             )
-            self.log(f"  ⚠ [RAS]  {ruta_visual}: non-local source, skipped")
+            self.log(f"  ⚠ [RAS]  {display_path}: non-local source, skipped")
             return
 
         src_path = Path(src_raw)
@@ -317,23 +321,23 @@ class Exporter:
         for aux in src_path.parent.glob(src_path.stem + ".*"):
             if aux.resolve() == src_resolved:
                 continue
-            sufijo_completo = aux.name[len(src_path.stem):]
-            shutil.copy(aux, layer_dir / f"{name}{sufijo_completo}")
+            full_suffix = aux.name[len(src_path.stem):]
+            shutil.copy(aux, layer_dir / f"{name}{full_suffix}")
 
         layer.setDataSource(str(dest_file), layer.name(), "gdal")
-        self.log(f"  ✓ [RAS]  {ruta_visual}{src_path.suffix}")
+        self.log(f"  ✓ [RAS]  {display_path}{src_path.suffix}")
         self.ok_count += 1
 
     # ─────────────────────────────────────
     # LAYOUT IMAGES
     # ─────────────────────────────────────
 
-    def _exportar_imagenes(self, dest_root):
-        imagenes_root = dest_root / "IMAGES"
-        imagenes_root.mkdir(parents=True, exist_ok=True)
+    def _export_images(self, dest_root):
+        images_root = dest_root / "IMAGES"
+        images_root.mkdir(parents=True, exist_ok=True)
 
         manager = self.export_project.layoutManager()
-        ya_copiados = {}
+        already_copied = {}
 
         for layout in manager.layouts():
             for item in layout.items():
@@ -345,11 +349,11 @@ class Exporter:
                     continue
 
                 src_path = Path(src)
-                if src_path.suffix.lower() not in self.EXTENSIONES_IMG:
+                if src_path.suffix.lower() not in self.IMG_EXTENSIONS:
                     continue
 
                 if not src_path.is_file():
-                    self.errores.append(
+                    self.errors.append(
                         f"[IMG]  {layout.name()} → '{src_path.name}': "
                         f"file not found"
                     )
@@ -361,8 +365,9 @@ class Exporter:
 
                 src_resolved = src_path.resolve()
 
-                if src_resolved in ya_copiados:
-                    dest_file = ya_copiados[src_resolved]
+                # Already copied → just update the path
+                if src_resolved in already_copied:
+                    dest_file = already_copied[src_resolved]
                     item.setPicturePath(str(dest_file))
                     self.log(
                         f"  = [IMG]  Layout '{layout.name()}' → "
@@ -370,16 +375,20 @@ class Exporter:
                     )
                     continue
 
-                dest_file = imagenes_root / src_path.name
+                # First time → copy and register
+                dest_file = images_root / src_path.name
+
+                # If a file with that name exists from a different source,
+                # rename to avoid collisions
                 if dest_file.exists():
                     stem, suffix = src_path.stem, src_path.suffix
                     counter = 1
                     while dest_file.exists():
-                        dest_file = imagenes_root / f"{stem}_{counter}{suffix}"
+                        dest_file = images_root / f"{stem}_{counter}{suffix}"
                         counter += 1
 
                 shutil.copy(src_path, dest_file)
-                ya_copiados[src_resolved] = dest_file
+                already_copied[src_resolved] = dest_file
                 item.setPicturePath(str(dest_file))
                 self.log(
                     f"  ✓ [IMG]  Layout '{layout.name()}' → "
@@ -391,15 +400,15 @@ class Exporter:
     # SUMMARY
     # ─────────────────────────────────────
 
-    def _resumen(self, salida):
+    def _summary(self, output):
         self.log("")
         self.log("=" * 55)
         self.log(f"  ✓ {self.ok_count} layers exported")
         self.log(f"  ✓ {self.img_ok} images exported")
         self.log(f"  ~ {self.wms_count} WMS layers kept with original URL")
-        self.log(f"  ✓ Output: {salida}")
-        if self.errores:
-            self.log(f"  ⚠ {len(self.errores)} warning(s):")
-            for e in self.errores:
+        self.log(f"  ✓ Output: {output}")
+        if self.errors:
+            self.log(f"  ⚠ {len(self.errors)} warning(s):")
+            for e in self.errors:
                 self.log(f"      {e}")
         self.log("=" * 55)
