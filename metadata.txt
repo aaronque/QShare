@@ -3,26 +3,25 @@ name=QShare
 qgisMinimumVersion=3.22
 qgisMaximumVersion=4.99
 description=Export a packaged QGIS project (layers + images + .qgz) to a folder or ZIP file, without external dependencies.
-version=0.1.2
-author=Aarón Quesada (ISLAYA Consultoría Ambiental) 
+version=0.1.3
+author=Aarón Quesada (ISLAYA Consultoría Ambiental)
 email=quesada.garcia.aaron@gmail.com
-
 about=Package the active project: copy the vector layers (as SHP files or in a single GPKG), local rasters, and images used in composites; rewrite the paths as relative paths; and save the .qgz file along with everything else. WMS/WMTS layers are retained with their original URLs. Export as a folder or as a .zip file. Does not modify the active project in QGIS.
-
 tracker=https://github.com/aaronque/QShare/issues
 repository=https://github.com/aaronque/QShare
 homepage=https://github.com/aaronque/QShare
-
-
 category=Plugins
 icon=icon.png
-
-changelog=0.1.2
-       - Translated all source code to English
-       - Fixed raster sidecar files preserving full suffix (.tif.aux.xml, .tfw)
-       - Improved parallel project handling to fully preserve user session
-
 experimental=False
 deprecated=False
-
 tags=export,package,project,geopackage,shapefile,zip
+
+changelog=0.1.3
+    - Removed unnecessary execute permissions from plugin files
+    - Added missing trailing newlines in source files
+ 0.1.2
+    - Translated all source code to English
+    - Fixed raster sidecar files preserving full suffix (.tif.aux.xml, .tfw)
+    - Improved parallel project handling to fully preserve user session
+ 0.1.1
+    - Initial public release
