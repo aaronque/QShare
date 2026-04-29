@@ -1,0 +1,23 @@
+[general]
+name=QShare
+qgisMinimumVersion=3.22
+qgisMaximumVersion=4.99
+description=Export a packaged QGIS project (layers + images + .qgz) to a folder or ZIP file, without external dependencies.
+version=0.1.0
+author=Aarón Quesada for ISLAYA Consultoría Ambiental. 
+email=
+
+about=Package the active project: copy the vector layers (as SHP files or in a single GPKG), local rasters, and images used in composites; rewrite the paths as relative paths; and save the .qgz file along with everything else. WMS/WMTS layers are retained with their original URLs. Export as a folder or as a .zip file. Does not modify the active project in QGIS.
+
+tracker=
+repository=
+homepage=
+
+category=Plugins
+icon=icon.png
+
+experimental=False
+deprecated=False
+supportsQt6=True
+
+tags=export,package,project,geopackage,shapefile,zip
