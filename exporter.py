@@ -318,7 +318,7 @@ class Exporter:
             if aux.resolve() == src_resolved:
                 continue
             sufijo_completo = aux.name[len(src_path.stem):]
-            shutil.copy2(aux, layer_dir / f"{name}{sufijo_completo}")
+            shutil.copy(aux, layer_dir / f"{name}{sufijo_completo}")
 
         layer.setDataSource(str(dest_file), layer.name(), "gdal")
         self.log(f"  ✓ [RAS]  {ruta_visual}{src_path.suffix}")
