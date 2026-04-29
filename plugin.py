@@ -19,7 +19,7 @@ class ExportarProyectoPlugin:
         icon = QIcon(icon_path) if os.path.isfile(icon_path) else QIcon()
         self.action = QAction(
             icon,
-            "Export packaged project…",
+            "Export project…",
             self.iface.mainWindow(),
         )
         self.action.triggered.connect(self.run)
