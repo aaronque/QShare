@@ -44,9 +44,9 @@ Once published, install it from **Plugins → Manage and Install Plugins → All
 
 1. Download or clone this repository.
 2. Copy the `QShare` folder into your QGIS plugin directory:
-   - **Linux:** `~/.local/share/QGIS/QGIS3/profiles/default/python/plugins/`
-   - **Windows:** `%APPDATA%\QGIS\QGIS3\profiles\default\python\plugins\`
-   - **macOS:** `~/Library/Application Support/QGIS/QGIS3/profiles/default/python/plugins/`
+   - **Linux:** `~/.local/share/QGIS/QGISX/profiles/default/python/plugins/`
+   - **Windows:** `%APPDATA%\QGIS\QGISX\profiles\default\python\plugins\`
+   - **macOS:** `~/Library/Application Support/QGIS/QGISX/profiles/default/python/plugins/`
 3. Restart QGIS (or reload plugins).
 4. Enable **QShare** under **Plugins → Manage and Install Plugins → Installed**.
 
