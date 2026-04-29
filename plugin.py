@@ -11,7 +11,7 @@ class ExportarProyectoPlugin:
     def __init__(self, iface):
         self.iface = iface
         self.action = None
-        self.menu_name = "&Export Project"
+        self.menu_name = "&QShare"
         self.plugin_dir = os.path.dirname(__file__)
 
     def initGui(self):
