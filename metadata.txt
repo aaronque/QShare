@@ -4,7 +4,7 @@ qgisMinimumVersion=3.22
 qgisMaximumVersion=4.99
 description=Export a packaged QGIS project (layers + images + .qgz) to a folder or ZIP file, without external dependencies.
 version=0.1.1
-author=Aarón Quesada for ISLAYA Consultoría Ambiental. 
+author=Aarón Quesada (ISLAYA Consultoría Ambiental) 
 email=quesada.garcia.aaron@gmail.com
 
 
