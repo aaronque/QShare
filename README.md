@@ -36,9 +36,7 @@ If you choose ZIP output, the resulting `MyProject.zip` contains exactly that st
 
 ### From the QGIS Plugin Repository
 
-*(pending approval)*
-
-Once published, install it from **Plugins → Manage and Install Plugins → All**, search for "QShare".
+Install it from **Plugins → Manage and Install Plugins → All**, search for "QShare".
 
 ### Manual installation
 
